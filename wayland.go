@@ -296,12 +296,20 @@ func (a *application) apply(cmd command) error {
 	if err != nil {
 		return err
 	}
+	existing := make(map[string]bool, len(a.items))
 	if cmd.Replace {
 		a.items = nil
 		a.scroll = 0
 		a.focus = 0
+	} else {
+		for _, item := range a.items {
+			existing[item.path] = true
+		}
 	}
 	for _, path := range paths {
+		if existing[path] {
+			continue
+		}
 		a.items = append(a.items, entry{path, true})
 	}
 	a.status = ""

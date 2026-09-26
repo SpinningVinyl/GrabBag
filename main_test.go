@@ -79,6 +79,44 @@ func TestInputAndDragPayload(t *testing.T) {
 	}
 }
 
+func TestDuplicateCanonicalPaths(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "file")
+	alias := filepath.Join(dir, "alias")
+	other := filepath.Join(dir, "other")
+	for _, name := range []string{path, other} {
+		if err := os.WriteFile(name, nil, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(path, alias); err != nil {
+		t.Fatal(err)
+	}
+	got, err := validatePaths([]string{alias})
+	if err != nil || !reflect.DeepEqual(got, []string{path}) {
+		t.Fatalf("canonical path: %q, %v", got, err)
+	}
+	for _, paths := range [][]string{{path, path}, {path, alias}} {
+		got, err := validatePaths(paths)
+		if err != nil || !reflect.DeepEqual(got, []string{path}) {
+			t.Fatalf("deduplicated paths: %q, %v", got, err)
+		}
+	}
+	app := &application{items: []entry{{path, false}}, visible: true}
+	if err := app.apply(command{Paths: [][]byte{[]byte(other), []byte(alias), []byte(other)}}); err != nil {
+		t.Fatal(err)
+	}
+	if want := []entry{{path, false}, {other, true}}; !reflect.DeepEqual(app.items, want) {
+		t.Fatalf("added items: %v; want %v", app.items, want)
+	}
+	if err := app.apply(command{Replace: true, Paths: [][]byte{[]byte(path), []byte(alias), []byte(other), []byte(other)}}); err != nil {
+		t.Fatal(err)
+	}
+	if want := []entry{{path, true}, {other, true}}; !reflect.DeepEqual(app.items, want) {
+		t.Fatalf("replaced items: %v; want %v", app.items, want)
+	}
+}
+
 type failedReader struct{}
 
 func (failedReader) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }

@@ -54,19 +54,28 @@ func readPaths(r io.Reader, delimiter byte) ([]string, error) {
 
 func validatePaths(paths []string) ([]string, error) {
 	result := make([]string, 0, len(paths))
+	seen := make(map[string]bool, len(paths))
 	for _, path := range paths {
 		absolute, err := filepath.Abs(path)
 		if err != nil {
 			return nil, err
 		}
-		info, err := os.Stat(absolute)
+		canonical, err := filepath.EvalSymlinks(absolute)
+		if err != nil {
+			return nil, fmt.Errorf("%q: %w", path, err)
+		}
+		info, err := os.Stat(canonical)
 		if err != nil {
 			return nil, fmt.Errorf("%q: %w", path, err)
 		}
 		if !info.Mode().IsRegular() {
 			return nil, fmt.Errorf("%q is not a regular file", path)
 		}
-		result = append(result, absolute)
+		if seen[canonical] {
+			continue
+		}
+		seen[canonical] = true
+		result = append(result, canonical)
 	}
 	return result, nil
 }
