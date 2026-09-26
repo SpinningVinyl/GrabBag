@@ -14,6 +14,7 @@ import (
 	"time"
 
 	wl "github.com/SpinningVinyl/go-wayland/wayland/client"
+	"github.com/SpinningVinyl/go-wayland/wayland/cursor"
 	xdg "github.com/SpinningVinyl/go-wayland/wayland/stable/xdg-shell"
 	activation "github.com/SpinningVinyl/go-wayland/wayland/staging/xdg-activation-v1"
 	"golang.org/x/sys/unix"
@@ -31,6 +32,8 @@ type application struct {
 	device                                     *wl.DataDevice
 	activation                                 *activation.Activation
 	surface, cursor                            *wl.Surface
+	cursorTheme                                *cursor.Theme
+	cursorHotspotX, cursorHotspotY             int32
 	xsurface                                   *xdg.Surface
 	top                                        *xdg.Toplevel
 	outputs                                    map[uint32]int
@@ -63,6 +66,14 @@ func serveAppWith(initial *command, ready func()) error {
 		return err
 	}
 	defer a.display.Context().Close()
+	defer func() {
+		if a.cursor != nil {
+			_ = a.cursor.Destroy()
+		}
+		if a.cursorTheme != nil {
+			_ = a.cursorTheme.Destroy()
+		}
+	}()
 	socket := filepath.Join(dir, "socket")
 	if err := os.Remove(socket); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
@@ -363,7 +374,7 @@ func (a *application) capabilities(e wl.SeatCapabilitiesEvent) {
 		a.pointer.SetEnterHandler(func(e wl.PointerEnterEvent) {
 			a.x, a.y = e.SurfaceX, e.SurfaceY
 			if a.cursor != nil {
-				a.check(a.pointer.SetCursor(e.Serial, a.cursor, 1, 1))
+				a.check(a.pointer.SetCursor(e.Serial, a.cursor, a.cursorHotspotX, a.cursorHotspotY))
 			}
 		})
 		a.pointer.SetLeaveHandler(func(wl.PointerLeaveEvent) { a.pressSerial = 0 })

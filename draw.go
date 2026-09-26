@@ -9,10 +9,13 @@ import (
 	"image/color"
 	"image/draw"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	wl "github.com/SpinningVinyl/go-wayland/wayland/client"
+	"github.com/SpinningVinyl/go-wayland/wayland/cursor"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/image/font/opentype"
@@ -171,9 +174,29 @@ func (a *application) makeCursor() error {
 	if err != nil {
 		return err
 	}
+	name, size := cursorSettings()
+	theme, err := cursor.LoadTheme(name, size, a.shm)
+	if err == nil {
+		arrow := theme.GetCursor(cursor.LeftPtr)
+		if arrow == nil {
+			arrow = theme.GetCursor("default")
+		}
+		if arrow != nil && len(arrow.Images) > 0 {
+			img := &arrow.Images[0]
+			buffer, err := img.GetBuffer()
+			if err != nil {
+				_ = theme.Destroy()
+				return err
+			}
+			a.cursorTheme = theme
+			a.cursorHotspotX, a.cursorHotspotY = int32(img.HotspotX), int32(img.HotspotY)
+			a.check(a.cursor.Attach(buffer, 0, 0))
+			a.check(a.cursor.Commit())
+			return a.err
+		}
+		_ = theme.Destroy()
+	}
 	frame := image.NewRGBA(image.Rect(0, 0, 20, 26))
-	// for now we're jsut drawing a static cursor at 1x;
-    // TODO: use cursor themes/scaled cursor buffers for polish.
 	for y := 1; y < 22; y++ {
 		for x := 1; x <= min(y/2+1, 10); x++ {
 			c := color.RGBA{245, 245, 245, 255}
@@ -188,7 +211,59 @@ func (a *application) makeCursor() error {
 		return err
 	}
 	buffer.SetReleaseHandler(func(wl.BufferReleaseEvent) { a.check(buffer.Destroy()) })
+	a.cursorHotspotX, a.cursorHotspotY = 1, 1
 	a.check(a.cursor.Attach(buffer, 0, 0))
 	a.check(a.cursor.Commit())
 	return a.err
+}
+
+func cursorSettings() (string, int) {
+	name := os.Getenv("XCURSOR_THEME")
+	size := cursorSize(os.Getenv("XCURSOR_SIZE"))
+	if strings.Contains(os.Getenv("XDG_CURRENT_DESKTOP"), "KDE") || os.Getenv("KDE_FULL_SESSION") == "true" {
+		if name == "" {
+			name = kdeCursorSetting("cursorTheme")
+			if name == "" {
+				name = "breeze_cursors"
+			}
+		}
+		if size == 0 {
+			size = cursorSize(kdeCursorSetting("cursorSize"))
+		}
+	} else if strings.Contains(os.Getenv("XDG_CURRENT_DESKTOP"), "GNOME") {
+		if name == "" {
+			name = strings.Trim(gnomeCursorSetting("cursor-theme"), "'")
+		}
+		if size == 0 {
+			size = cursorSize(gnomeCursorSetting("cursor-size"))
+		}
+	}
+	if size == 0 {
+		size = 24
+	}
+	return name, size
+}
+
+func gnomeCursorSetting(key string) string {
+	value, err := exec.Command("gsettings", "get", "org.gnome.desktop.interface", key).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(value))
+}
+
+func cursorSize(value string) int {
+	size, err := strconv.Atoi(value)
+	if err != nil || size < 1 || size > 256 {
+		return 0
+	}
+	return size
+}
+
+func kdeCursorSetting(key string) string {
+	value, err := exec.Command("kreadconfig6", "--file", "kcminputrc", "--group", "Mouse", "--key", key).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(value))
 }
