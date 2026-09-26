@@ -138,6 +138,11 @@ func (a *application) paint() error {
 	}
 	text(12, h-14, w-34, status, muted)
 	icon("dots-diagonal", w-24, h-24, 24, muted)
+	const border = 2
+	rect(0, 0, w, border, accent)
+	rect(0, h-border, w, border, accent)
+	rect(0, border, border, h-2*border, accent)
+	rect(w-border, border, border, h-2*border, accent)
 	if a.err != nil {
 		return a.err
 	}
