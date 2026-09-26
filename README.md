@@ -1,5 +1,7 @@
 # Grab Bag -- drag and drop files from your terminal
 
+![Grab Bag UI](hero.png "Grab Bag UI")
+
 A small file-drag app for Wayland desktops written in Go. It renders using Wayland primitives; no GTK, Qt, CGO, or native development libraries are used or needed.
 
 ## Build and run
