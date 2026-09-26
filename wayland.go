@@ -18,6 +18,7 @@ import (
 	"github.com/SpinningVinyl/go-wayland/wayland/cursor"
 	xdg "github.com/SpinningVinyl/go-wayland/wayland/stable/xdg-shell"
 	activation "github.com/SpinningVinyl/go-wayland/wayland/staging/xdg-activation-v1"
+	toplevelicon "github.com/SpinningVinyl/go-wayland/wayland/staging/xdg-toplevel-icon-v1"
 	"golang.org/x/sys/unix"
 )
 
@@ -32,6 +33,8 @@ type application struct {
 	manager                                    *wl.DataDeviceManager
 	device                                     *wl.DataDevice
 	activation                                 *activation.Activation
+	iconManager                                *toplevelicon.ToplevelIconManager
+	iconSizes                                  []int
 	surface, cursor                            *wl.Surface
 	cursorTheme                                *cursor.Theme
 	cursorHotspotX, cursorHotspotY             int32
@@ -63,7 +66,7 @@ func serveAppWith(initial *command, ready func()) error {
 	if err != nil {
 		return err
 	}
-	a := &application{width: 480, height: 360, scale: 1, outputs: map[uint32]int{}, entered: map[uint32]bool{}}
+	a := &application{width: 360, height: 360, scale: 1, outputs: map[uint32]int{}, entered: map[uint32]bool{}}
 	if err := a.connect(); err != nil {
 		return err
 	}
@@ -74,6 +77,9 @@ func serveAppWith(initial *command, ready func()) error {
 		}
 		if a.cursorTheme != nil {
 			_ = a.cursorTheme.Destroy()
+		}
+		if a.iconManager != nil {
+			_ = a.iconManager.Destroy()
 		}
 	}()
 	socket := filepath.Join(dir, "socket")
@@ -205,6 +211,14 @@ func (a *application) connect() error {
 		case "xdg_activation_v1":
 			a.activation = activation.NewActivation(ctx)
 			proxy = a.activation
+		case "xdg_toplevel_icon_manager_v1":
+			a.iconManager = toplevelicon.NewToplevelIconManager(ctx)
+			proxy = a.iconManager
+			a.iconManager.SetIconSizeHandler(func(e toplevelicon.ToplevelIconManagerIconSizeEvent) {
+				if e.Size > 0 && e.Size <= 512 {
+					a.iconSizes = append(a.iconSizes, int(e.Size))
+				}
+			})
 		case "wl_output":
 			output := wl.NewOutput(ctx)
 			proxy = output
@@ -265,9 +279,6 @@ func (a *application) connect() error {
 	if err != nil {
 		return err
 	}
-	a.check(a.top.SetTitle("Grab Bag"))
-	a.check(a.top.SetAppId("grbg"))
-	a.check(a.top.SetMinSize(320, 220))
 	a.top.SetConfigureHandler(func(e xdg.ToplevelConfigureEvent) {
 		if e.Width > 0 {
 			a.width = int(e.Width)
@@ -333,6 +344,12 @@ func (a *application) apply(cmd command) error {
 
 func (a *application) show(token string) {
 	if !a.visible {
+		a.check(a.top.SetTitle("Grab Bag"))
+		a.check(a.top.SetAppId("grbg"))
+		a.check(a.top.SetMinSize(320, 220))
+		if a.iconManager != nil {
+			a.check(a.setAppIcon(a.iconManager, a.iconSizes))
+		}
 		a.visible = true
 		a.configured = false
 		a.dirty = true
