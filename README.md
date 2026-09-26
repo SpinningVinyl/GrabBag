@@ -1,4 +1,4 @@
-# Grab Bag -- drag'n'drop files from your terminal
+# Grab Bag -- drag and drop files from your terminal
 
 A small file-drag app for Wayland desktops written in Go. It renders using Wayland primitives; no GTK, Qt, CGO, or native development libraries are used or needed.
 
@@ -19,7 +19,7 @@ To add files to the Grab Bag:
 grbg file1 file2
 ```
 
-You can also pipe output of other commands into it:
+It fully supports stdin, so you can also pipe the output of other commands into it:
 
 ```sh
 find ~/Pictures -name '*.png' -print | ./grbg
@@ -43,3 +43,11 @@ To exit the app:
 ```sh
 grbg --stop
 ```
+
+## License
+
+Grab Bag is licensed under the GNU General Public License, version 2 or (at
+your option) any later version (`GPL-2.0-or-later`). See [LICENSE](LICENSE) for
+the full license text.
+
+See [NOTICE](NOTICE) for third party copyright notices and licenses.

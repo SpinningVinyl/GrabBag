@@ -117,6 +117,36 @@ func TestDuplicateCanonicalPaths(t *testing.T) {
 	}
 }
 
+func TestCursorSettings(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CURRENT_DESKTOP", "KDE")
+	t.Setenv("KDE_FULL_SESSION", "true")
+	t.Setenv("XCURSOR_THEME", "")
+	t.Setenv("XCURSOR_SIZE", "")
+	if err := os.WriteFile(filepath.Join(dir, "kreadconfig6"), []byte("#!/bin/sh\ncase \"$6\" in\n cursorTheme) echo Breeze_Light;;\n cursorSize) echo 32;;\nesac\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+	if name, size := cursorSettings(); name != "Breeze_Light" || size != 32 {
+		t.Fatalf("KDE cursor: %q, %d", name, size)
+	}
+	t.Setenv("XCURSOR_THEME", "Adwaita")
+	t.Setenv("XCURSOR_SIZE", "48")
+	if name, size := cursorSettings(); name != "Adwaita" || size != 48 {
+		t.Fatalf("environment cursor: %q, %d", name, size)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "gsettings"), []byte("#!/bin/sh\ncase \"$3\" in\n cursor-theme) echo \"'Yaru'\";;\n cursor-size) echo 36;;\nesac\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_CURRENT_DESKTOP", "GNOME")
+	t.Setenv("KDE_FULL_SESSION", "")
+	t.Setenv("XCURSOR_THEME", "")
+	t.Setenv("XCURSOR_SIZE", "")
+	if name, size := cursorSettings(); name != "Yaru" || size != 36 {
+		t.Fatalf("GNOME cursor: %q, %d", name, size)
+	}
+}
+
 type failedReader struct{}
 
 func (failedReader) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
