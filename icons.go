@@ -1,0 +1,48 @@
+//go:build linux
+
+package main
+
+import (
+	"bytes"
+	"embed"
+	"image"
+	"image/color"
+	"image/draw"
+
+	"github.com/srwiley/oksvg"
+	"github.com/srwiley/rasterx"
+)
+
+//go:embed assets/*.svg
+var iconAssets embed.FS
+
+type iconKey struct {
+	name string
+	size int
+}
+
+func (a *application) drawIcon(dst *image.RGBA, name string, x, y, size, scale int, tint color.RGBA) error {
+	if a.iconCache == nil {
+		a.iconCache = make(map[iconKey]*image.RGBA)
+	}
+	key := iconKey{name, size * scale}
+	mask := a.iconCache[key]
+	if mask == nil {
+		data, err := iconAssets.ReadFile("assets/" + name + ".svg")
+		if err != nil {
+			return err
+		}
+		data = bytes.ReplaceAll(data, []byte("currentColor"), []byte("#ffffff"))
+		icon, err := oksvg.ReadIconStream(bytes.NewReader(data))
+		if err != nil {
+			return err
+		}
+		mask = image.NewRGBA(image.Rect(0, 0, key.size, key.size))
+		icon.SetTarget(0, 0, float64(key.size), float64(key.size))
+		icon.Draw(rasterx.NewDasher(key.size, key.size, rasterx.NewScannerGV(key.size, key.size, mask, mask.Bounds())), 1)
+		a.iconCache[key] = mask
+	}
+	point := image.Pt(x*scale, y*scale)
+	draw.DrawMask(dst, image.Rectangle{Min: point, Max: point.Add(mask.Bounds().Size())}, image.NewUniform(tint), image.Point{}, mask, image.Point{}, draw.Over)
+	return nil
+}

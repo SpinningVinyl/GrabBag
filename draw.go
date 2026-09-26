@@ -71,10 +71,13 @@ func (a *application) paint() error {
 	fg := color.RGBA{238, 242, 247, 255}
 	muted := color.RGBA{177, 188, 203, 255}
 	accent := color.RGBA{98, 195, 238, 255}
+	icon := func(name string, x, y, size int, tint color.RGBA) {
+		a.check(a.drawIcon(frame, name, x, y, size, scale, tint))
+	}
 	rect(0, 0, w, h, bg)
 	rect(0, 0, w, 30, panel)
 	text(12, 21, w-60, "Grab Bag", fg)
-	text(w-28, 21, 24, "x", fg)
+	icon("x", w-32, 3, 24, fg)
 	if a.focus == 3 {
 		rect(w-38, 28, 36, 2, accent)
 	}
@@ -106,10 +109,10 @@ func (a *application) paint() error {
 			rect(8, y, w-20, 38, panel)
 			rect(8, y, 2, 38, accent)
 		}
-		rect(16, y+10, 18, 18, muted)
-		rect(18, y+12, 14, 14, bg)
 		if item.selected {
-			text(20, y+24, 16, "x", accent)
+			icon("square-check", 13, y+7, 24, accent)
+		} else {
+			icon("square", 13, y+7, 24, muted)
 		}
 		text(44, y+15, w-66, filepath.Base(item.path), fg)
 		text(44, y+32, w-66, filepath.Dir(item.path), muted)
@@ -123,13 +126,21 @@ func (a *application) paint() error {
 		rect(w-8, 80+((track-thumb)*a.scroll/max(1, len(a.items)-a.rows())), 3, thumb, accent)
 	}
 	label := fmt.Sprintf("Drag %d selected file(s)", selected)
-	button(12, h-76, w-24, 40, 2, label)
+	rect(12, h-76, w-24, 40, panel)
+	if a.focus == 2 {
+		rect(12, h-38, w-24, 2, accent)
+	}
+	icon("grip-vertical", 20, h-68, 24, fg)
+	text(52, h-51, w-76, label, fg)
 	status := a.status
 	if status == "" {
 		status = "Tab: focus   Space: select   Esc: hide"
 	}
 	text(12, h-14, w-34, status, muted)
-	text(w-16, h-4, 16, "/", muted)
+	icon("dots-diagonal", w-24, h-24, 24, muted)
+	if a.err != nil {
+		return a.err
+	}
 	buffer, err := a.upload(frame)
 	if err != nil {
 		return err

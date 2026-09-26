@@ -5,6 +5,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"image"
 	"io"
 	"net"
 	"os"
@@ -39,6 +40,7 @@ type application struct {
 	outputs                                    map[uint32]int
 	entered                                    map[uint32]bool
 	items                                      []entry
+	iconCache                                  map[iconKey]*image.RGBA
 	width, height, scale, scroll, focus        int
 	x, y, pressX, pressY                       float64
 	pressSerial                                uint32
