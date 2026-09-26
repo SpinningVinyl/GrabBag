@@ -78,9 +78,6 @@ func (a *application) paint() error {
 	rect(0, 0, w, 30, panel)
 	text(12, 21, w-60, "Grab Bag", fg)
 	icon("x", w-32, 3, 24, fg)
-	if a.focus == 3 {
-		rect(w-38, 28, 36, 2, accent)
-	}
 	button := func(x, y, width, height, focus int, label string) {
 		rect(x, y, width, height, panel)
 		if a.focus == focus {

@@ -394,6 +394,13 @@ func (a *application) updateScale() {
 	}
 }
 
+func (a *application) advanceFocus() {
+	a.focus = (a.focus + 1) % (len(a.items) + 4)
+	if a.focus == 3 {
+		a.focus = (a.focus + 1) % (len(a.items) + 4)
+	}
+}
+
 func (a *application) capabilities(e wl.SeatCapabilitiesEvent) {
 	var err error
 	if e.Capabilities&uint32(wl.SeatCapabilityPointer) != 0 && a.pointer == nil {
@@ -450,7 +457,7 @@ func (a *application) capabilities(e wl.SeatCapabilitiesEvent) {
 			case 1:
 				a.hide()
 			case 15:
-				a.focus = (a.focus + 1) % (len(a.items) + 4)
+				a.advanceFocus()
 			case 103:
 				a.focus = max(4, a.focus-1)
 				a.focus = min(a.focus, len(a.items)+3)
@@ -488,7 +495,6 @@ func (a *application) button(e wl.PointerButtonEvent) {
 	switch {
 	case y < 30:
 		if x >= a.width-40 {
-			a.focus = 3
 			a.hide()
 		} else {
 			a.check(a.top.Move(a.seat, e.Serial))
@@ -534,8 +540,6 @@ func (a *application) activate(focus int) {
 		a.focus = 1
 	case 2:
 		a.status = "Drag this handle with the pointer."
-	case 3:
-		a.hide()
 	default:
 		if i := focus - 4; i >= 0 && i < len(a.items) {
 			a.items[i].selected = !a.items[i].selected
