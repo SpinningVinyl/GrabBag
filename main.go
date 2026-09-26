@@ -242,6 +242,21 @@ func runtimeDir() (string, error) {
 	return dir, nil
 }
 
+func lockInstance(dir string) (*os.File, error) {
+	lock, err := os.OpenFile(filepath.Join(dir, "grbg.instance.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		return nil, err
+	}
+	if err := unix.Flock(int(lock.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
+		lock.Close()
+		if errors.Is(err, unix.EWOULDBLOCK) {
+			return nil, errors.New("another Grab Bag instance is already running")
+		}
+		return nil, err
+	}
+	return lock, nil
+}
+
 func sendCommand(conn net.Conn, cmd command) error {
 	if err := conn.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
 		return err

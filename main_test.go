@@ -181,6 +181,39 @@ func TestCommandRoundTripAndStop(t *testing.T) {
 	}
 }
 
+func TestEmptyCommandLeavesWindowHidden(t *testing.T) {
+	a := &application{}
+	if err := a.apply(command{}); err != nil {
+		t.Fatal(err)
+	}
+	if a.visible {
+		t.Fatal("empty command showed the window")
+	}
+	a.visible = true
+	if err := a.apply(command{}); err != nil || !a.visible {
+		t.Fatalf("empty command changed an existing window: visible=%t, err=%v", a.visible, err)
+	}
+}
+
+func TestInstanceLock(t *testing.T) {
+	dir := t.TempDir()
+	first, err := lockInstance(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	if second, err := lockInstance(dir); err == nil {
+		second.Close()
+		t.Fatal("second instance acquired the lock")
+	}
+	first.Close()
+	third, err := lockInstance(dir)
+	if err != nil {
+		t.Fatalf("lock remained held after exit: %v", err)
+	}
+	third.Close()
+}
+
 // Exercise the actual Wayland requests and SCM_RIGHTS transfer, without a GUI.
 func TestDragTransfer(t *testing.T) {
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: filepath.Join(t.TempDir(), "wayland"), Net: "unix"})

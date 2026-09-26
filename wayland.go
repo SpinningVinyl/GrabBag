@@ -66,6 +66,16 @@ func serveAppWith(initial *command, ready func()) error {
 	if err != nil {
 		return err
 	}
+	instanceLock, err := lockInstance(filepath.Dir(dir))
+	if err != nil {
+		return err
+	}
+	defer instanceLock.Close()
+	socket := filepath.Join(dir, "socket")
+	if conn, err := net.DialTimeout("unix", socket, 100*time.Millisecond); err == nil {
+		conn.Close()
+		return errors.New("another Grab Bag instance is already running")
+	}
 	a := &application{width: 360, height: 360, scale: 1, outputs: map[uint32]int{}, entered: map[uint32]bool{}}
 	if err := a.connect(); err != nil {
 		return err
@@ -82,7 +92,6 @@ func serveAppWith(initial *command, ready func()) error {
 			_ = a.iconManager.Destroy()
 		}
 	}()
-	socket := filepath.Join(dir, "socket")
 	if err := os.Remove(socket); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
@@ -308,6 +317,9 @@ func (a *application) apply(cmd command) error {
 			a.show(cmd.Token)
 		}
 		return a.err
+	}
+	if len(cmd.Paths) == 0 && !cmd.Replace {
+		return nil
 	}
 	paths := make([]string, 0, len(cmd.Paths))
 	for _, path := range cmd.Paths {
