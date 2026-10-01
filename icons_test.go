@@ -12,6 +12,7 @@ import (
 	"time"
 
 	wl "github.com/SpinningVinyl/go-wayland/wayland/client"
+	viewporter "github.com/SpinningVinyl/go-wayland/wayland/stable/viewporter"
 	xdg "github.com/SpinningVinyl/go-wayland/wayland/stable/xdg-shell"
 	toplevelicon "github.com/SpinningVinyl/go-wayland/wayland/staging/xdg-toplevel-icon-v1"
 )
@@ -31,6 +32,22 @@ func TestIconsRenderAtOutputScale(t *testing.T) {
 		}
 		if visible < 10 {
 			t.Errorf("%s rendered only %d visible pixels", name, visible)
+		}
+	}
+}
+
+func TestFractionalScalePreferredOverOutputScale(t *testing.T) {
+	a := &application{scale: 120, viewport: &viewporter.Viewport{}, outputs: map[uint32]int{1: 2}, entered: map[uint32]bool{1: true}}
+	a.updateScale()
+	if a.scale != 240 {
+		t.Fatalf("fallback scale = %d, want 240", a.scale)
+	}
+	for _, preferred := range []int{180, 210} {
+		a.dirty = false
+		a.preferredScale = preferred
+		a.updateScale()
+		if a.scale != preferred || !a.dirty {
+			t.Fatalf("preferred scale = %d, want %d", a.scale, preferred)
 		}
 	}
 }

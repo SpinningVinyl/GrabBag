@@ -16,7 +16,9 @@ import (
 
 	wl "github.com/SpinningVinyl/go-wayland/wayland/client"
 	"github.com/SpinningVinyl/go-wayland/wayland/cursor"
+	viewporter "github.com/SpinningVinyl/go-wayland/wayland/stable/viewporter"
 	xdg "github.com/SpinningVinyl/go-wayland/wayland/stable/xdg-shell"
+	fractional "github.com/SpinningVinyl/go-wayland/wayland/staging/fractional-scale-v1"
 	activation "github.com/SpinningVinyl/go-wayland/wayland/staging/xdg-activation-v1"
 	toplevelicon "github.com/SpinningVinyl/go-wayland/wayland/staging/xdg-toplevel-icon-v1"
 	"golang.org/x/sys/unix"
@@ -34,6 +36,10 @@ type application struct {
 	device                                     *wl.DataDevice
 	activation                                 *activation.Activation
 	iconManager                                *toplevelicon.ToplevelIconManager
+	fractionalManager                          *fractional.FractionalScaleManager
+	fractionalScale                            *fractional.FractionalScale
+	viewporter                                 *viewporter.Viewporter
+	viewport                                   *viewporter.Viewport
 	iconSizes                                  []int
 	surface, cursor                            *wl.Surface
 	cursorTheme                                *cursor.Theme
@@ -45,6 +51,7 @@ type application struct {
 	items                                      []entry
 	iconCache                                  map[iconKey]*image.RGBA
 	width, height, scale, scroll, focus        int
+	preferredScale                             int
 	x, y, pressX, pressY                       float64
 	pressSerial                                uint32
 	visible, configured, dirty, dragging, quit bool
@@ -76,12 +83,24 @@ func serveAppWith(initial *command, ready func()) error {
 		conn.Close()
 		return errors.New("another Grab Bag instance is already running")
 	}
-	a := &application{width: 360, height: 360, scale: 1, outputs: map[uint32]int{}, entered: map[uint32]bool{}}
+	a := &application{width: 360, height: 360, scale: 120, outputs: map[uint32]int{}, entered: map[uint32]bool{}}
 	if err := a.connect(); err != nil {
 		return err
 	}
 	defer a.display.Context().Close()
 	defer func() {
+		if a.fractionalScale != nil {
+			_ = a.fractionalScale.Destroy()
+		}
+		if a.viewport != nil {
+			_ = a.viewport.Destroy()
+		}
+		if a.fractionalManager != nil {
+			_ = a.fractionalManager.Destroy()
+		}
+		if a.viewporter != nil {
+			_ = a.viewporter.Destroy()
+		}
 		if a.cursor != nil {
 			_ = a.cursor.Destroy()
 		}
@@ -220,6 +239,12 @@ func (a *application) connect() error {
 		case "xdg_activation_v1":
 			a.activation = activation.NewActivation(ctx)
 			proxy = a.activation
+		case "wp_fractional_scale_manager_v1":
+			a.fractionalManager = fractional.NewFractionalScaleManager(ctx)
+			proxy = a.fractionalManager
+		case "wp_viewporter":
+			a.viewporter = viewporter.NewViewporter(ctx)
+			proxy = a.viewporter
 		case "xdg_toplevel_icon_manager_v1":
 			a.iconManager = toplevelicon.NewToplevelIconManager(ctx)
 			proxy = a.iconManager
@@ -272,6 +297,23 @@ func (a *application) connect() error {
 	a.surface, err = a.compositor.CreateSurface()
 	if err != nil {
 		return err
+	}
+	if a.fractionalManager != nil && a.viewporter != nil {
+		a.viewport, err = a.viewporter.GetViewport(a.surface)
+		if err != nil {
+			return err
+		}
+		a.fractionalScale, err = a.fractionalManager.GetFractionalScale(a.surface)
+		if err != nil {
+			return err
+		}
+		a.fractionalScale.SetPreferredScaleHandler(func(e fractional.FractionalScalePreferredScaleEvent) {
+			if e.Scale == 0 {
+				return
+			}
+			a.preferredScale = int(e.Scale)
+			a.updateScale()
+		})
 	}
 	a.surface.SetEnterHandler(func(e wl.SurfaceEnterEvent) { a.entered[e.Output.ID()] = true; a.updateScale() })
 	a.surface.SetLeaveHandler(func(e wl.SurfaceLeaveEvent) { delete(a.entered, e.Output.ID()); a.updateScale() })
@@ -384,9 +426,12 @@ func (a *application) hide() {
 }
 
 func (a *application) updateScale() {
-	scale := 1
+	scale := 120
 	for id := range a.entered {
-		scale = max(scale, a.outputs[id])
+		scale = max(scale, 120*a.outputs[id])
+	}
+	if a.viewport != nil && a.preferredScale > 0 {
+		scale = a.preferredScale
 	}
 	if a.scale != scale {
 		a.scale = scale

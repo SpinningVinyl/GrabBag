@@ -17,6 +17,7 @@ import (
 	wl "github.com/SpinningVinyl/go-wayland/wayland/client"
 	"github.com/SpinningVinyl/go-wayland/wayland/cursor"
 	"golang.org/x/image/font"
+	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/math/fixed"
@@ -29,26 +30,45 @@ func (a *application) clampScroll() { a.scroll = max(0, min(a.scroll, len(a.item
 
 func (a *application) paint() error {
 	w, h, scale := a.width, a.height, a.scale
-	if w <= 0 || h <= 0 || scale <= 0 || int64(w)*int64(h)*int64(scale)*int64(scale) > 32<<20 {
+	// support fractional scaling for crisp text and icons
+	px := func(v int) int { return int((int64(v)*int64(scale) + 60) / 120) }
+	if w <= 0 || h <= 0 || scale <= 0 {
+		return fmt.Errorf("unsupported window dimensions %dx%d at scale %d", w, h, scale)
+	}
+	bufferW, bufferH := px(w), px(h)
+	if bufferW <= 0 || bufferH <= 0 || bufferW > (32<<20)/bufferH {
 		return fmt.Errorf("unsupported window dimensions %dx%d at scale %d", w, h, scale)
 	}
 	a.clampScroll()
-	frame := image.NewRGBA(image.Rect(0, 0, w*scale, h*scale))
+	frame := image.NewRGBA(image.Rect(0, 0, bufferW, bufferH))
 	rect := func(x, y, width, height int, c color.RGBA) {
-		draw.Draw(frame, image.Rect(x*scale, y*scale, (x+width)*scale, (y+height)*scale), image.NewUniform(c), image.Point{}, draw.Src)
+		draw.Draw(frame,
+			image.Rect(px(x), px(y), px(x+width), px(y+height)),
+			image.NewUniform(c),
+			image.Point{},
+			draw.Src)
 	}
 	ttf, err := opentype.Parse(goregular.TTF)
 	if err != nil {
 		return err
 	}
-	face, err := opentype.NewFace(ttf, &opentype.FaceOptions{Size: 14 * float64(scale), DPI: 72, Hinting: font.HintingFull})
+	face, err := opentype.NewFace(ttf, &opentype.FaceOptions{Size: 14 * float64(scale) / 120, DPI: 72, Hinting: font.HintingFull})
 	if err != nil {
 		return err
 	}
 	defer face.Close()
-	text := func(x, baseline, maxWidth int, s string, c color.RGBA) {
+	boldTTF, err := opentype.Parse(gobold.TTF)
+	if err != nil {
+		return err
+	}
+	boldFace, err := opentype.NewFace(boldTTF, &opentype.FaceOptions{Size: 14 * float64(scale) / 120, DPI: 72, Hinting: font.HintingFull})
+	if err != nil {
+		return err
+	}
+	defer boldFace.Close()
+	textWithFace := func(x, baseline, maxWidth int, s string, c color.RGBA, face font.Face) {
 		s = strings.NewReplacer("\n", "\\n", "\r", "\\r", "\t", "\\t").Replace(s)
-		limit := fixed.I(maxWidth * scale)
+		limit := fixed.I(px(maxWidth))
 		if font.MeasureString(face, s) > limit {
 			limit -= font.MeasureString(face, "...")
 			var width fixed.Int26_6
@@ -63,8 +83,11 @@ func (a *application) paint() error {
 			}
 			s = s[:end] + "..."
 		}
-		d := font.Drawer{Dst: frame, Src: image.NewUniform(c), Face: face, Dot: fixed.P(x*scale, baseline*scale)}
+		d := font.Drawer{Dst: frame, Src: image.NewUniform(c), Face: face, Dot: fixed.P(px(x), px(baseline))}
 		d.DrawString(s)
+	}
+	text := func(x, baseline, maxWidth int, s string, c color.RGBA) {
+		textWithFace(x, baseline, maxWidth, s, c, face)
 	}
 	bg := color.RGBA{24, 28, 35, 255}
 	panel := color.RGBA{40, 47, 58, 255}
@@ -72,11 +95,11 @@ func (a *application) paint() error {
 	muted := color.RGBA{177, 188, 203, 255}
 	accent := color.RGBA{98, 195, 238, 255}
 	icon := func(name string, x, y, size int, tint color.RGBA) {
-		a.check(a.drawIcon(frame, name, x, y, size, scale, tint))
+		a.check(a.drawIcon(frame, name, px(x), px(y), px(size), 1, tint))
 	}
 	rect(0, 0, w, h, bg)
 	rect(0, 0, w, 30, panel)
-	text(12, 21, w-60, "Grab Bag", fg)
+	textWithFace(12, 21, w-60, "Grab Bag", fg, boldFace)
 	icon("x", w-32, 3, 24, fg)
 	button := func(x, y, width, height, focus int, label string) {
 		rect(x, y, width, height, panel)
@@ -149,7 +172,12 @@ func (a *application) paint() error {
 	}
 	a.inFlight++
 	buffer.SetReleaseHandler(func(wl.BufferReleaseEvent) { a.inFlight--; a.check(buffer.Destroy()) })
-	a.check(a.surface.SetBufferScale(int32(scale)))
+	if a.viewport != nil {
+		a.check(a.surface.SetBufferScale(1))
+		a.check(a.viewport.SetDestination(int32(w), int32(h)))
+	} else {
+		a.check(a.surface.SetBufferScale(int32(scale / 120)))
+	}
 	a.check(a.surface.Attach(buffer, 0, 0))
 	a.check(a.surface.Damage(0, 0, int32(w), int32(h)))
 	a.check(a.surface.Commit())

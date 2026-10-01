@@ -46,6 +46,10 @@ To exit the app:
 grbg --stop
 ```
 
+## Note on file names
+
+The embedded font supports all characters defined in the WGL4 character set, which means that it should have no issues displaying file names using Latin-1, Cyrillic, Greek and Turkish characters. However, more exotic scripts are not supported at the moment.
+
 ## License
 
 Grab Bag is licensed under the GNU General Public License, version 2 or (at
